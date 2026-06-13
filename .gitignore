@@ -1,0 +1,25 @@
+# Python
+**/__pycache__/
+*.pyc
+
+# Virtual Environments
+venv/
+env/
+
+# SQLite
+database/security.db
+
+# Uploads
+uploads/
+
+# Generated Reports
+reports/*.pdf
+
+# VS Code
+.vscode/
+
+# Environment Variables
+.env
+
+# OS Files
+.DS_Store
