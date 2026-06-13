@@ -76,6 +76,7 @@ def parse_nvd_response(response_data: dict[str, Any]) -> list[dict[str, str | fl
                 "cvss": cvss,
                 "severity": severity,
                 "description": get_english_description(cve.get("descriptions", [])),
+                "provider_source": "nvd",
             }
         )
 

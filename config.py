@@ -8,6 +8,8 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from utils.logger import configure_logging as _configure_logging
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -25,13 +27,15 @@ class Settings:
     """Application settings with safe defaults for local development."""
 
     project_root: Path = PROJECT_ROOT
-    database_path: Path = PROJECT_ROOT / "database" / "security.db"
-    upload_folder: Path = PROJECT_ROOT / "uploads"
+    database_path: Path = Path(os.getenv("DATABASE_PATH", str(PROJECT_ROOT / "database" / "security.db")))
+    upload_folder: Path = Path(os.getenv("UPLOAD_FOLDER", str(PROJECT_ROOT / "uploads")))
     report_path: Path = PROJECT_ROOT / "reports" / "security_report.pdf"
     sample_scan_path: Path = PROJECT_ROOT / "scans" / "sample_scan.xml"
     secret_key: str = os.getenv("SECRET_KEY") or secrets.token_hex(32)
     flask_debug: bool = _env_bool("FLASK_DEBUG", False)
-    max_upload_bytes: int = int(os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+    max_upload_bytes: int = int(
+        os.getenv("MAX_UPLOAD_SIZE", os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+    )
     nvd_api_key: str | None = os.getenv("NVD_API_KEY")
     nvd_timeout: int = int(os.getenv("NVD_TIMEOUT", "15"))
     nvd_enabled: bool = _env_bool("NVD_ENABLED", True)
@@ -43,7 +47,4 @@ settings = Settings()
 
 def configure_logging(level: str | None = None) -> None:
     """Configure consistent logging for command-line scripts and Flask."""
-    logging.basicConfig(
-        level=getattr(logging, (level or settings.log_level).upper(), logging.INFO),
-        format="%(levelname)s:%(name)s:%(message)s",
-    )
+    _configure_logging(level or settings.log_level)

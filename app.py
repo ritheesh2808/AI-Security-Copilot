@@ -12,7 +12,14 @@ from werkzeug.utils import secure_filename
 
 from ai.security_analyst import build_security_findings
 from config import configure_logging, settings
-from database.db import get_all_findings
+from database.db import (
+    create_scan,
+    get_all_findings,
+    get_findings_for_scan,
+    get_host_services,
+    get_scan_details,
+    get_scan_history,
+)
 from version import __version__
 
 
@@ -70,6 +77,31 @@ def index() -> str:
     )
 
 
+@app.route("/history")
+def history() -> str:
+    """Display historical scan imports."""
+    return render_template(
+        "history.html", scans=get_scan_history(), version=__version__
+    )
+
+
+@app.route("/scan/<int:scan_id>")
+def scan_details(scan_id: int) -> str:
+    """Display hosts, services, and findings for one scan."""
+    scan = get_scan_details(scan_id)
+    if scan is None:
+        flash("Scan not found.", "danger")
+        return redirect(url_for("history"))
+
+    return render_template(
+        "scan_details.html",
+        scan=scan,
+        services=get_host_services(scan_id),
+        findings=get_findings_for_scan(scan_id),
+        version=__version__,
+    )
+
+
 @app.route("/upload", methods=["POST"])
 def upload_scan():
     """Save, validate, analyze, and persist an uploaded Nmap XML scan."""
@@ -92,7 +124,18 @@ def upload_scan():
         uploaded_file.save(file_path)
         logger.info("Uploaded filename: %s", file_path.resolve())
         validate_nmap_xml(file_path)
-        findings = build_security_findings(file_path)
+        scan_id = create_scan(
+            scan_name=safe_name,
+            uploaded_filename=safe_name,
+            source="upload",
+        )
+        findings = build_security_findings(
+            file_path,
+            scan_id=scan_id,
+            scan_name=safe_name,
+            uploaded_filename=safe_name,
+            source="upload",
+        )
     except (etree.XMLSyntaxError, OSError, ValueError) as error:
         file_path.unlink(missing_ok=True)
         flash(f"Scan import failed: {error}", "danger")

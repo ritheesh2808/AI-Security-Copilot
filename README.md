@@ -1,129 +1,89 @@
 # AI Security Copilot
 
-AI Security Copilot is a Python security-analysis dashboard for pentesters. It imports Nmap XML scans, extracts discovered services, enriches them with CVE data, calculates risk, generates beginner-friendly security analysis, persists findings in SQLite, displays results in Flask, and creates PDF assessment reports.
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![Flask](https://img.shields.io/badge/Flask-3.x-black)
+![SQLite](https://img.shields.io/badge/SQLite-Persistence-lightgrey)
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions-success)
+![Security Scan](https://img.shields.io/badge/Security-Bandit-success)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-Current version: `0.10.0`
+> Portfolio-grade security analysis dashboard for importing Nmap XML scans, enriching services with CVE intelligence, assessing risk, tracking historical scans, and generating PDF reports.
+
+Current version: `v1.0.0`
 
 ## Features
 
-- Safe Nmap XML upload workflow with file type, size, and XML structure validation
-- Nmap parser built with `lxml` using network-disabled XML parsing
-- Common CVE provider interface with official NVD API integration
-- Local fallback CVE database when NVD is unavailable or returns no results
-- CVSS-to-risk engine for Low, Medium, High, and Critical ratings
-- Local AI-style security analysis with impact and recommendation text
-- SQLite persistence with duplicate-safe upserts
-- Bootstrap dashboard with summary cards and risk color coding
-- PDF report generation with ReportLab
-- Standard-library automated tests
-- GitHub Actions CI with compile, tests, dependency validation, and Bandit security scan
+- Safe Nmap XML upload workflow with extension, size, XML, and Nmap-root validation
+- Nmap parser for hosts, hostnames, ports, protocols, service names, products, versions, and CPEs
+- Official NVD API integration with local CVE fallback
+- Provider source tracking: `nvd`, `local_fallback`, and `no_match`
+- CVSS-based risk engine
+- Local AI-style security analyst summaries, impacts, and recommendations
+- Normalized SQLite schema for scans, hosts, services, and findings
+- Historical scan dashboard at `/history`
+- Scan detail dashboard at `/scan/<scan_id>`
+- Bootstrap dashboard with risk-colored findings
+- PDF report generation from sample scans or selected scan records
+- Automated tests and GitHub Actions CI
+- Bandit security scanning
 
-## Architecture
+## Architecture Diagram
 
 ```text
 Nmap XML Upload
        |
        v
-   XML Parser
+Create Scan Record
        |
        v
-   CVE Provider
-   /         \
-NVD API   Local Fallback
+Parser -> Hosts -> Services
        |
        v
-   Risk Engine
+CVE Provider -> NVD API / Local Fallback / No Match
        |
        v
-  AI Analysis
+Risk Engine -> AI Analysis
        |
        v
-     SQLite
-      /   \
-     v     v
-Dashboard PDF Report
+SQLite Findings
+       |
+       +--> Dashboard
+       +--> History
+       +--> Scan Details
+       +--> PDF Reports
 ```
 
 More detail is available in [docs/architecture.md](docs/architecture.md).
 
-## Project Structure
-
-```text
-AI-Security-Copilot/
-├── ai/                 # Local security analysis layer
-├── cve/                # NVD and local CVE providers
-├── database/           # SQLite persistence helpers
-├── docs/               # Architecture and project documentation
-├── parser/             # Nmap XML parser
-├── reports/            # PDF report generator
-├── risk/               # CVSS risk rating logic
-├── scans/              # Sample scan data
-├── scripts/            # Maintenance and validation scripts
-├── templates/          # Flask HTML templates
-├── tests/              # Automated test suite
-├── uploads/            # Local uploaded scans, ignored by Git
-├── app.py              # Flask dashboard entry point
-├── config.py           # Central configuration
-└── version.py          # Project version
-```
-
 ## Installation
 
-1. Clone the repository:
-
-   ```bash
-   git clone <repository-url>
-   cd AI-Security-Copilot
-   ```
-
-2. Create and activate a virtual environment:
-
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
-
-3. Install runtime dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Validate dependencies:
-
-   ```bash
-   python scripts/check_requirements.py
-   ```
-
-5. Initialize SQLite:
-
-   ```bash
-   python database/db.py
-   ```
+```bash
+git clone <repository-url>
+cd AI-Security-Copilot
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python scripts/check_requirements.py
+python database/db.py
+```
 
 ## Configuration
 
-Configuration is read in [config.py](config.py). Useful environment variables:
+Copy `.env.example` or export values directly:
 
 ```text
-SECRET_KEY       Flask secret key for sessions and flash messages
-FLASK_DEBUG      Set true to enable Flask debug mode locally
-MAX_UPLOAD_BYTES Maximum upload size in bytes, default 5242880
-NVD_API_KEY      Optional NVD API key for better rate limits
-NVD_TIMEOUT      NVD request timeout in seconds, default 15
-NVD_ENABLED      Set false to disable live NVD lookups
-LOG_LEVEL        Logging level, default INFO
-```
-
-For local offline development, run commands with:
-
-```bash
-NVD_ENABLED=false python app.py
+SECRET_KEY       Flask secret key
+NVD_API_KEY      Optional NVD API key
+UPLOAD_FOLDER    Upload directory
+DATABASE_PATH    SQLite database path
+MAX_UPLOAD_SIZE  Maximum upload size in bytes
+NVD_ENABLED      Set false for offline demos
+LOG_LEVEL        Logging level
 ```
 
 ## Usage
 
-Start the Flask dashboard:
+Start the dashboard:
 
 ```bash
 python app.py
@@ -133,18 +93,12 @@ Open:
 
 [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-Upload an Nmap `.xml` file. The app will parse, analyze, store, and display findings.
+Useful routes:
 
-Run individual modules:
-
-```bash
-python parser/nmap_parser.py
-python cve/nvd_provider.py
-python cve/real_cve_lookup.py
-python risk/risk_assessor.py
-python ai/security_analyst.py
-python reports/pdf_generator.py
-```
+- `/` - Dashboard
+- `/upload` - Upload handler
+- `/history` - Historical scans
+- `/scan/<scan_id>` - Scan details
 
 Generate a PDF report:
 
@@ -152,63 +106,52 @@ Generate a PDF report:
 python reports/pdf_generator.py
 ```
 
-Output:
-
-```text
-reports/security_report.pdf
-```
-
-## Testing
-
-Run all automated tests:
+Run tests:
 
 ```bash
 python -m unittest discover -s tests
+bandit -r . -x ./venv,./tests
 ```
 
-Run core validation commands:
+## Dashboard Screenshots
+
+Screenshots should be added before public portfolio publishing:
+
+- [Dashboard placeholder](screenshots/dashboard-placeholder.md)
+- [PDF report placeholder](screenshots/pdf-report-placeholder.md)
+
+## PDF Report Screenshots
+
+Add a PDF preview screenshot to `screenshots/` after generating `reports/security_report.pdf`.
+
+## Security Disclaimer
+
+This project is intended for educational, portfolio, and authorized security assessment workflows only. Do not upload scans from systems you do not own or have permission to test. NVD lookups may send product and version information to an external API; use `NVD_ENABLED=false` for offline demonstrations.
+
+## Contribution Guide
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Run tests and Bandit.
+4. Submit a pull request using the PR template.
 
 ```bash
 python scripts/check_requirements.py
-python -m compileall -q .
+python -m unittest discover -s tests
+bandit -r . -x ./venv,./tests
 ```
-
-## Screenshots
-
-Add dashboard screenshots to `screenshots/` before publishing the portfolio page.
-
-Suggested screenshots:
-
-- Dashboard summary cards
-- Nmap upload form
-- Findings table
-- Generated PDF report preview
-
-## Security Notes
-
-- Uploaded XML is parsed with network access and entity resolution disabled.
-- Uploads are limited by file extension, maximum size, and expected Nmap root tag.
-- Runtime artifacts such as uploads, SQLite files, PDFs, virtual environments, and bytecode are ignored by Git.
-- The NVD provider has timeout and exception handling with local fallback.
 
 ## Future Roadmap
 
-- Add authenticated user accounts
-- Store scan history and remediation status
-- Add provider adapters for additional CVE sources
-- Add Ollama-backed optional security analysis
-- Add Docker and production WSGI deployment files
-- Add richer PDF branding and screenshots
-- Add type checking with mypy or pyright
+- Authentication and CSRF protection
+- CPE-based NVD queries
+- CISA KEV and EPSS enrichment
+- Remediation tracking
+- Scan diffing
+- Docker and production WSGI deployment
+- Richer PDF branding
+- Type checking and coverage reports
 
-## Technologies Used
+## License
 
-- Python
-- Flask
-- SQLite
-- lxml
-- requests
-- ReportLab
-- Bootstrap
-- Nmap XML
-- GitHub Actions
+This project is released under the [MIT License](LICENSE).

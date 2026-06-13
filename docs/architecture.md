@@ -1,147 +1,152 @@
 # Architecture
 
-AI Security Copilot is organized as a modular pipeline. Each stage has a focused responsibility and can be tested independently.
+AI Security Copilot is a scan-centric security analysis pipeline. Module 11 normalizes the database so scans, hosts, services, and findings are tracked as separate records.
 
-## End-to-End Flow
-
-```text
-Nmap Upload
-    |
-    v
-Parser
-    |
-    v
-CVE Engine
-    |
-    +--> NVD Provider
-    |
-    +--> Local Fallback Database
-    |
-    v
-Risk Engine
-    |
-    v
-AI Analysis
-    |
-    v
-SQLite
-   / \
-  v   v
-Dashboard
-      |
-      v
-PDF Report
-```
-
-## Components
-
-### Nmap Upload
-
-`app.py` exposes the Flask dashboard and `/upload` route. The upload workflow:
-
-1. Accepts `.xml` files only.
-2. Enforces a maximum upload size.
-3. Saves uploads to `uploads/`.
-4. Parses XML safely with `lxml`.
-5. Confirms the root tag is `nmaprun`.
-6. Sends the uploaded path into the analysis pipeline.
-
-### Parser
-
-`parser/nmap_parser.py` extracts:
-
-- IP address
-- Port
-- Service name
-- Product
-- Version
-
-The parser disables XML entity resolution and network access.
-
-### CVE Engine
-
-`cve/real_cve_lookup.py` is the common provider interface used by the rest of the app.
-
-Provider order:
-
-1. Normalize the product name.
-2. Query the official NVD API through `cve/nvd_provider.py`.
-3. If NVD fails or returns no matches, use `cve/cve_lookup.py` as local fallback.
-
-All providers return the same structure:
-
-```python
-{
-    "cve_id": "CVE-...",
-    "cvss": 7.5,
-    "severity": "High",
-    "description": "..."
-}
-```
-
-### Risk Engine
-
-`risk/risk_assessor.py` converts CVSS scores into risk ratings:
-
-- `0.0 - 3.9`: Low
-- `4.0 - 6.9`: Medium
-- `7.0 - 8.9`: High
-- `9.0 - 10.0`: Critical
-
-### AI Analysis
-
-`ai/security_analyst.py` combines parser output, CVE data, and risk ratings. It currently uses local security explanations and is structured so an Ollama provider can be added later.
-
-When no CVE is found, the service is still stored as an informational `NO-CVE-MATCH` finding.
-
-### SQLite
-
-`database/db.py` stores findings in `database/security.db`.
-
-The uniqueness rule uses:
+## Component Diagram
 
 ```text
-ip_address + port + cve
+            +------------------+
+            |  Flask Dashboard |
+            +---------+--------+
+                      |
+                      v
+            +------------------+
+            | Upload Workflow  |
+            +---------+--------+
+                      |
+                      v
++-------------+  +----------+  +----------------+
+| Nmap XML    +->+ Parser   +->+ Scan Analyzer  |
++-------------+  +----------+  +-------+--------+
+                                      |
+                                      v
+                         +------------------------+
+                         | CVE Provider Interface |
+                         +-----+------------+-----+
+                               |            |
+                               v            v
+                          +---------+  +------------+
+                          | NVD API |  | Local DB   |
+                          +---------+  +------------+
+                                      |
+                                      v
+                              +-------------+
+                              | Risk Engine |
+                              +------+------+
+                                     |
+                                     v
+                              +-------------+
+                              | SQLite DB   |
+                              +------+------+
+                                     |
+                         +-----------+-----------+
+                         v                       v
+                  +-------------+         +--------------+
+                  | Dashboard   |         | PDF Reports  |
+                  +-------------+         +--------------+
 ```
 
-This prevents duplicate rows when the same scan is analyzed multiple times.
+## Data Flow
 
-### Dashboard
+```text
+Upload XML
+  -> Validate file extension, size, and nmaprun root
+  -> Create scans row
+  -> Parse host and service data
+  -> Create hosts rows
+  -> Create services rows
+  -> Query CVE providers
+  -> Calculate risk ratings
+  -> Create findings rows
+  -> Display dashboard/history/details
+  -> Generate PDF report when requested
+```
 
-`templates/index.html` displays:
+## Sequence Flow
 
-- Upload form
-- Total hosts
-- Total findings
-- Critical findings
-- High findings
-- Risk-colored findings table
+```text
+User -> Flask /upload
+Flask -> SQLite: create_scan()
+Flask -> Parser: parse_nmap_scan(uploaded_path)
+Parser -> Flask: parsed services
+Flask -> Analyzer: build_security_findings(scan_id)
+Analyzer -> SQLite: create_host()
+Analyzer -> SQLite: create_service()
+Analyzer -> CVE Provider: lookup_real_cves()
+CVE Provider -> NVD API: search_nvd()
+CVE Provider -> Local DB: fallback if needed
+Analyzer -> Risk Engine: calculate_risk()
+Analyzer -> SQLite: create_finding()
+Flask -> User: redirect dashboard with success
+```
 
-The dashboard reads persisted data from SQLite.
+## Database Diagram
 
-### PDF Report
+```text
+scans
+  id PK
+  scan_name
+  uploaded_filename
+  scan_timestamp
+  source
+  notes
+    |
+    | 1-to-many
+    v
+hosts
+  id PK
+  scan_id FK -> scans.id
+  ip_address
+  hostname
+    |
+    | 1-to-many
+    v
+services
+  id PK
+  host_id FK -> hosts.id
+  port
+  protocol
+  service_name
+  product
+  version
+  cpe
+    |
+    | 1-to-many
+    v
+findings
+  id PK
+  service_id FK -> services.id
+  cve
+  cvss
+  risk_rating
+  severity
+  description
+  provider_source
+```
 
-`reports/pdf_generator.py` builds `reports/security_report.pdf` with:
+## Module 11 Notes
 
-- Executive Summary
-- Findings
-- Risk Ratings
-- Recommendations
-- Conclusion
+Module 11 adds historical scan tracking and database normalization. The app now supports:
 
-### Configuration
+- Scan history at `/history`
+- Scan detail pages at `/scan/<scan_id>`
+- Provider source persistence
+- Hostname, protocol, and CPE parsing
+- PDF generation from selected scan records through `generate_scan_report(scan_id)`
 
-`config.py` centralizes paths, upload limits, NVD settings, logging level, and Flask secret configuration.
+## Security Controls
 
-### Automated Quality Gates
+- XML parsing disables entity resolution and network access.
+- Uploads enforce file size limits.
+- SQL uses parameterized queries.
+- Runtime artifacts are ignored by Git.
+- Bandit security scanning runs in CI.
 
-The test suite lives in `tests/` and covers:
+## Known Future Improvements
 
-- XML parsing
-- CVE provider fallback
-- Risk rating boundaries
-- SQLite persistence
-- Flask dashboard and upload workflow
-- PDF generation
-
-GitHub Actions runs dependency validation, compile checks, tests, and Bandit security scanning.
+- Authentication
+- CSRF protection
+- CPE-based NVD queries
+- Scan diffing
+- Remediation status tracking
+- Production WSGI deployment

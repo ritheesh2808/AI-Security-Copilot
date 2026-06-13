@@ -20,6 +20,7 @@ VULNERABILITY_DATABASE = {
             "cvss": 8.1,
             "severity": "High",
             "description": "Example vulnerability affecting Apache httpd 2.4.58.",
+            "provider_source": "local_fallback",
         }
     ],
     ("OpenSSH", "9.6p1"): [
@@ -28,6 +29,7 @@ VULNERABILITY_DATABASE = {
             "cvss": 9.8,
             "severity": "Critical",
             "description": "Example OpenSSH signal handler race condition.",
+            "provider_source": "local_fallback",
         }
     ],
     ("nginx", "1.24.0"): [
@@ -36,6 +38,7 @@ VULNERABILITY_DATABASE = {
             "cvss": 6.5,
             "severity": "Medium",
             "description": "Example vulnerability affecting nginx 1.24.0.",
+            "provider_source": "local_fallback",
         }
     ],
 }

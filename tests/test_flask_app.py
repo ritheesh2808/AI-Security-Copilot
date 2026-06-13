@@ -57,6 +57,34 @@ class FlaskAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Invalid file type", response.data)
 
+    def test_history_and_scan_details_pages_load(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            test_db = Path(temp_dir) / "security.db"
+            upload_dir = Path(temp_dir) / "uploads"
+            scan_data = settings.sample_scan_path.read_bytes()
+            original_upload_folder = app.config["UPLOAD_FOLDER"]
+
+            app.config["UPLOAD_FOLDER"] = upload_dir
+            try:
+                with patch.object(db, "DATABASE_PATH", test_db), patch(
+                    "cve.real_cve_lookup.search_nvd", return_value=[]
+                ):
+                    app.test_client().post(
+                        "/upload",
+                        data={"scan_file": (BytesIO(scan_data), "history.xml")},
+                        content_type="multipart/form-data",
+                        follow_redirects=True,
+                    )
+                    history_response = app.test_client().get("/history")
+                    details_response = app.test_client().get("/scan/1")
+            finally:
+                app.config["UPLOAD_FOLDER"] = original_upload_folder
+
+        self.assertEqual(history_response.status_code, 200)
+        self.assertIn(b"history.xml", history_response.data)
+        self.assertEqual(details_response.status_code, 200)
+        self.assertIn(b"Hosts and Services", details_response.data)
+
 
 if __name__ == "__main__":
     unittest.main()

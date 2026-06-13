@@ -10,7 +10,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from cve.real_cve_lookup import lookup_real_cves
-from database.db import save_finding
+from database.db import (
+    create_finding,
+    create_host,
+    create_scan,
+    create_service,
+)
 from parser.nmap_parser import DEFAULT_SCAN_PATH, parse_nmap_scan
 from risk.risk_assessor import calculate_risk
 
@@ -78,12 +83,37 @@ def generate_analysis(
 
 def build_security_findings(
     scan_path: Path = DEFAULT_SCAN_PATH,
+    scan_id: int | None = None,
+    scan_name: str | None = None,
+    uploaded_filename: str | None = None,
+    source: str = "sample",
 ) -> list[dict[str, str | float | int]]:
     """Analyze an Nmap scan, save its findings, and return the results."""
     findings: list[dict[str, str | float | int]] = []
     services = parse_nmap_scan(scan_path)
 
+    if scan_id is None:
+        scan_id = create_scan(
+            scan_name or Path(scan_path).stem,
+            uploaded_filename or Path(scan_path).name,
+            source=source,
+        )
+
     for service in services:
+        host_id = create_host(
+            scan_id=scan_id,
+            ip_address=str(service["ip_address"]),
+            hostname=str(service.get("hostname", "")),
+        )
+        service_id = create_service(
+            host_id=host_id,
+            port=int(service["port"]),
+            protocol=str(service.get("protocol", "tcp")),
+            service_name=str(service.get("service_name", "Unknown")),
+            product=str(service["product"]),
+            version=str(service["version"]),
+            cpe=str(service.get("cpe", "")),
+        )
         product = str(service["product"])
         version = str(service["version"])
         matching_cves = lookup_real_cves(product, version)
@@ -96,36 +126,64 @@ def build_security_findings(
 
             finding = {
                 "ip_address": service["ip_address"],
+                "hostname": service.get("hostname", ""),
                 "port": service["port"],
+                "protocol": service.get("protocol", "tcp"),
+                "service_name": service.get("service_name", "Unknown"),
                 "product": product,
                 "version": version,
+                "cpe": service.get("cpe", ""),
                 "cve": cve_id,
                 "cvss": cvss,
                 "risk_rating": calculate_risk(cvss),
+                "severity": severity,
                 "description": str(cve_data["description"]),
+                "provider_source": str(cve_data.get("provider_source", "unknown")),
                 **analysis,
             }
             findings.append(finding)
 
             # Automatically persist every completed analysis finding.
-            save_finding(finding)
+            create_finding(
+                service_id=service_id,
+                cve=cve_id,
+                cvss=cvss,
+                risk_rating=str(finding["risk_rating"]),
+                severity=severity,
+                description=str(finding["description"]),
+                provider_source=str(finding["provider_source"]),
+            )
 
         # Keep scanned services even when the CVE provider has no matching entry.
         if not matching_cves:
             analysis = generate_analysis(product, version, "NO-CVE-MATCH", "Low")
             finding = {
                 "ip_address": service["ip_address"],
+                "hostname": service.get("hostname", ""),
                 "port": service["port"],
+                "protocol": service.get("protocol", "tcp"),
+                "service_name": service.get("service_name", "Unknown"),
                 "product": product,
                 "version": version,
+                "cpe": service.get("cpe", ""),
                 "cve": "NO-CVE-MATCH",
                 "cvss": 0.0,
                 "risk_rating": calculate_risk(0.0),
+                "severity": "Low",
                 "description": "No matching CVE was found by the configured providers.",
+                "provider_source": "no_match",
                 **analysis,
             }
             findings.append(finding)
-            save_finding(finding)
+            create_finding(
+                service_id=service_id,
+                cve="NO-CVE-MATCH",
+                cvss=0.0,
+                risk_rating=str(finding["risk_rating"]),
+                severity="Low",
+                description=str(finding["description"]),
+                provider_source="no_match",
+            )
 
     logger.info("Findings saved count: %d", len(findings))
     return findings

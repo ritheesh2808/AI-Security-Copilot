@@ -1,9 +1,10 @@
 [project]
 name = "ai-security-copilot"
-version = "0.10.0"
+version = "1.0.0"
 description = "Nmap-to-CVE security analysis dashboard for pentesters."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 
 [tool.bandit]
 exclude_dirs = ["venv", "tests"]

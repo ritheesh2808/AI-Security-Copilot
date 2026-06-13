@@ -24,6 +24,7 @@ from reportlab.platypus import (
 
 from ai.security_analyst import build_security_findings
 from config import settings
+from database.db import get_findings_for_scan, get_scan_details
 
 
 REPORT_PATH = settings.report_path
@@ -105,7 +106,15 @@ def build_report_content(
         )
 
     content.append(Paragraph("Recommendations", styles["Heading1"]))
-    recommendations = dict.fromkeys(str(finding["recommendation"]) for finding in findings)
+    recommendations = dict.fromkeys(
+        str(
+            finding.get(
+                "recommendation",
+                "Review the affected service and apply vendor security guidance.",
+            )
+        )
+        for finding in findings
+    )
     if recommendations:
         for recommendation in recommendations:
             content.append(Paragraph(f"- {recommendation}", styles["BodyText"]))
@@ -139,6 +148,29 @@ def generate_pdf_report() -> Path:
     )
     document.build(build_report_content(findings))
     return REPORT_PATH
+
+
+def generate_scan_report(scan_id: int) -> Path:
+    """Generate a PDF report from findings stored for a selected scan."""
+    scan = get_scan_details(scan_id)
+    if scan is None:
+        raise ValueError(f"Scan {scan_id} was not found")
+
+    findings = get_findings_for_scan(scan_id)
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    report_path = REPORT_PATH.with_name(f"security_report_scan_{scan_id}.pdf")
+
+    document = SimpleDocTemplate(
+        str(report_path),
+        pagesize=landscape(A4),
+        rightMargin=15 * mm,
+        leftMargin=15 * mm,
+        topMargin=15 * mm,
+        bottomMargin=15 * mm,
+        title=f"AI Security Copilot Scan {scan_id} Report",
+    )
+    document.build(build_report_content(findings))
+    return report_path
 
 
 if __name__ == "__main__":

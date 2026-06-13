@@ -35,16 +35,21 @@ def parse_nmap_scan(scan_path: Path) -> list[dict[str, str | int]]:
     for host in hosts:
         ipv4_addresses = host.xpath("./address[@addrtype='ipv4']/@addr")
         ip_address = ipv4_addresses[0] if ipv4_addresses else "Unknown"
+        hostnames = host.xpath("./hostnames/hostname/@name")
+        hostname = hostnames[0] if hostnames else ""
 
         for port in host.xpath("./ports/port"):
             service = port.find("service")
             service_name = (
                 service.get("name", "Unknown") if service is not None else "Unknown"
             )
+            cpe_values = service.xpath("./cpe/text()") if service is not None else []
             results.append(
                 {
                     "ip_address": ip_address,
+                    "hostname": hostname,
                     "port": int(port.get("portid", "0")),
+                    "protocol": port.get("protocol", "tcp"),
                     "service_name": service_name,
                     # Some Nmap services, such as tcpwrapped, have no product.
                     "product": service.get("product", service_name)
@@ -53,6 +58,7 @@ def parse_nmap_scan(scan_path: Path) -> list[dict[str, str | int]]:
                     "version": service.get("version", "Unknown")
                     if service is not None
                     else "Unknown",
+                    "cpe": ", ".join(cpe_values),
                 }
             )
 

@@ -16,6 +16,11 @@
     <main class="container py-5">
         <h1 class="mb-1">AI Security Copilot</h1>
         <p class="text-muted mb-4">Pentest vulnerability dashboard</p>
+        <p>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('history') }}">
+                View Scan History
+            </a>
+        </p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}

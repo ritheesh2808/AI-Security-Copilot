@@ -44,6 +44,7 @@ class CVEProviderTests(unittest.TestCase):
                     "cvss": 7.5,
                     "severity": "High",
                     "description": "Example issue.",
+                    "provider_source": "nvd",
                 }
             ],
         )
