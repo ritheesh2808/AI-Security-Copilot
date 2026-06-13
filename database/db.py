@@ -1,14 +1,22 @@
 """SQLite persistence helpers for security findings."""
 
 import sqlite3
+import sys
 from pathlib import Path
 
 
-DATABASE_PATH = Path(__file__).resolve().parent / "security.db"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from config import settings
+
+
+DATABASE_PATH = settings.database_path
 
 
 def get_connection() -> sqlite3.Connection:
     """Open a database connection that returns rows like dictionaries."""
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
     return connection
@@ -16,7 +24,8 @@ def get_connection() -> sqlite3.Connection:
 
 def init_db() -> None:
     """Create the findings table when it does not already exist."""
-    with get_connection() as connection:
+    connection = get_connection()
+    try:
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS findings (
@@ -33,13 +42,17 @@ def init_db() -> None:
             )
             """
         )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def save_finding(finding: dict[str, str | float | int]) -> None:
     """Insert a finding, or update it when the same finding already exists."""
     init_db()
 
-    with get_connection() as connection:
+    connection = get_connection()
+    try:
         connection.execute(
             """
             INSERT INTO findings (
@@ -65,16 +78,22 @@ def save_finding(finding: dict[str, str | float | int]) -> None:
                 finding["description"],
             ),
         )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def get_all_findings() -> list[dict[str, str | float | int]]:
     """Return every stored finding ordered by highest CVSS score first."""
     init_db()
 
-    with get_connection() as connection:
+    connection = get_connection()
+    try:
         rows = connection.execute(
             "SELECT * FROM findings ORDER BY cvss DESC, id ASC"
         ).fetchall()
+    finally:
+        connection.close()
 
     return [dict(row) for row in rows]
 

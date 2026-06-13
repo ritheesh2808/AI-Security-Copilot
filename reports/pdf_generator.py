@@ -23,9 +23,10 @@ from reportlab.platypus import (
 )
 
 from ai.security_analyst import build_security_findings
+from config import settings
 
 
-REPORT_PATH = PROJECT_ROOT / "reports" / "security_report.pdf"
+REPORT_PATH = settings.report_path
 
 
 def build_findings_table(findings: list[dict[str, str | float | int]]) -> Table:

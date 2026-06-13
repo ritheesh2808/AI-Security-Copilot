@@ -1,5 +1,6 @@
 """Common CVE provider with a local database fallback."""
 
+import logging
 import sys
 from pathlib import Path
 
@@ -9,8 +10,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from cve.cve_lookup import lookup_local_cves
+from cve.nvd_provider import NVDProviderError, search_nvd
 from parser.nmap_parser import DEFAULT_SCAN_PATH, parse_nmap_scan
 
+
+logger = logging.getLogger(__name__)
 
 # Common aliases are converted to the names used by the CVE providers.
 PRODUCT_NAME_ALIASES = {
@@ -29,25 +33,29 @@ def normalize_product_name(product: str) -> str:
     return PRODUCT_NAME_ALIASES.get(cleaned_name.casefold(), cleaned_name)
 
 
-def query_real_cve_source(
-    product: str, version: str
-) -> list[dict[str, str | float]]:
-    """Query a real CVE source.
-
-    No external source is configured yet, so this returns an empty list. A future
-    API integration can be added here without changing the rest of the project.
-    """
-    return []
+def query_real_cve_source(product: str, version: str) -> list[dict[str, str | float]]:
+    """Query the configured real CVE provider."""
+    return search_nvd(product, version)
 
 
 def lookup_real_cves(product: str, version: str) -> list[dict[str, str | float]]:
     """Return real CVE results, or local fallback data when none are available."""
     normalized_product = normalize_product_name(product)
-    real_results = query_real_cve_source(normalized_product, version)
+    try:
+        real_results = query_real_cve_source(normalized_product, version)
+    except NVDProviderError as error:
+        logger.warning(
+            "NVD lookup failed for %s %s; using local fallback",
+            normalized_product,
+            version,
+        )
+        logger.debug("NVD error details: %s", error)
+        real_results = []
 
     if real_results:
         return real_results
 
+    logger.debug("Using local CVE fallback for %s %s", normalized_product, version)
     return lookup_local_cves(normalized_product, version)
 
 

@@ -1,16 +1,23 @@
 """Parse service information from an Nmap XML scan."""
 
 import logging
+import sys
 from pathlib import Path
 
-from lxml import etree
+# lxml is required for this project; parser instances disable entities and network.
+from lxml import etree  # nosec B410
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from config import settings
 
 
 logger = logging.getLogger(__name__)
 
 # Build the scan path from this file so the script works from any directory.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_SCAN_PATH = PROJECT_ROOT / "scans" / "sample_scan.xml"
+DEFAULT_SCAN_PATH = settings.sample_scan_path
 
 
 def parse_nmap_scan(scan_path: Path) -> list[dict[str, str | int]]:
@@ -20,7 +27,7 @@ def parse_nmap_scan(scan_path: Path) -> list[dict[str, str | int]]:
 
     # Disable network access while parsing because scan files are untrusted input.
     xml_parser = etree.XMLParser(no_network=True, resolve_entities=False)
-    tree = etree.parse(str(scan_path), xml_parser)
+    tree = etree.parse(str(scan_path), xml_parser)  # nosec B320
     results: list[dict[str, str | int]] = []
     hosts = tree.xpath("/nmaprun/host")
 

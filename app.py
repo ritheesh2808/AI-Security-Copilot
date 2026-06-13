@@ -5,21 +5,24 @@ from pathlib import Path
 from uuid import uuid4
 
 from flask import Flask, flash, redirect, render_template, request, url_for
-from lxml import etree
+# lxml is required for this project; parser instances disable entities and network.
+from lxml import etree  # nosec B410
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from ai.security_analyst import build_security_findings
+from config import configure_logging, settings
 from database.db import get_all_findings
+from version import __version__
 
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "development-secret-key"
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
-app.config["UPLOAD_FOLDER"] = Path(__file__).resolve().parent / "uploads"
+app.config["SECRET_KEY"] = settings.secret_key
+app.config["MAX_CONTENT_LENGTH"] = settings.max_upload_bytes
+app.config["UPLOAD_FOLDER"] = settings.upload_folder
 
 
 def get_security_findings() -> list[dict[str, str | float | int]]:
@@ -35,7 +38,7 @@ def allowed_xml_file(filename: str) -> bool:
 def validate_nmap_xml(file_path: Path) -> None:
     """Safely validate that an uploaded file contains Nmap XML."""
     xml_parser = etree.XMLParser(no_network=True, resolve_entities=False)
-    tree = etree.parse(str(file_path), xml_parser)
+    tree = etree.parse(str(file_path), xml_parser)  # nosec B320
 
     if tree.getroot().tag != "nmaprun":
         raise ValueError("The uploaded XML is not an Nmap scan.")
@@ -62,7 +65,9 @@ def index() -> str:
     """Display the security findings dashboard."""
     findings = get_security_findings()
     summary = build_summary(findings)
-    return render_template("index.html", findings=findings, summary=summary)
+    return render_template(
+        "index.html", findings=findings, summary=summary, version=__version__
+    )
 
 
 @app.route("/upload", methods=["POST"])
@@ -106,4 +111,4 @@ def handle_large_upload(error: RequestEntityTooLarge):
 
 if __name__ == "__main__":
     # Run the local development dashboard at http://127.0.0.1:5000.
-    app.run(debug=True)
+    app.run(debug=settings.flask_debug)

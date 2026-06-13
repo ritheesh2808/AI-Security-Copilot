@@ -1,8 +1,8 @@
 # Architecture
 
-AI Security Copilot uses a modular pipeline so each security-processing stage can be developed, tested, and replaced independently.
+AI Security Copilot is organized as a modular pipeline. Each stage has a focused responsibility and can be tested independently.
 
-## Processing Flow
+## End-to-End Flow
 
 ```text
 Nmap Upload
@@ -12,6 +12,10 @@ Parser
     |
     v
 CVE Engine
+    |
+    +--> NVD Provider
+    |
+    +--> Local Fallback Database
     |
     v
 Risk Engine
@@ -33,43 +37,111 @@ PDF Report
 
 ### Nmap Upload
 
-The Flask `/upload` route accepts `.xml` files, validates that they contain an Nmap document, and stores them in the local `uploads/` directory before analysis.
+`app.py` exposes the Flask dashboard and `/upload` route. The upload workflow:
+
+1. Accepts `.xml` files only.
+2. Enforces a maximum upload size.
+3. Saves uploads to `uploads/`.
+4. Parses XML safely with `lxml`.
+5. Confirms the root tag is `nmaprun`.
+6. Sends the uploaded path into the analysis pipeline.
 
 ### Parser
 
-`parser/nmap_parser.py` safely parses Nmap XML with `lxml`. It extracts IP addresses, ports, service names, products, and versions.
+`parser/nmap_parser.py` extracts:
+
+- IP address
+- Port
+- Service name
+- Product
+- Version
+
+The parser disables XML entity resolution and network access.
 
 ### CVE Engine
 
-`cve/real_cve_lookup.py` provides the common CVE lookup interface. It normalizes product names, supports a future real CVE source, and falls back to the local database in `cve/cve_lookup.py`.
+`cve/real_cve_lookup.py` is the common provider interface used by the rest of the app.
+
+Provider order:
+
+1. Normalize the product name.
+2. Query the official NVD API through `cve/nvd_provider.py`.
+3. If NVD fails or returns no matches, use `cve/cve_lookup.py` as local fallback.
+
+All providers return the same structure:
+
+```python
+{
+    "cve_id": "CVE-...",
+    "cvss": 7.5,
+    "severity": "High",
+    "description": "..."
+}
+```
 
 ### Risk Engine
 
-`risk/risk_assessor.py` converts CVSS scores into Low, Medium, High, or Critical risk ratings.
+`risk/risk_assessor.py` converts CVSS scores into risk ratings:
+
+- `0.0 - 3.9`: Low
+- `4.0 - 6.9`: Medium
+- `7.0 - 8.9`: High
+- `9.0 - 10.0`: Critical
 
 ### AI Analysis
 
-`ai/security_analyst.py` combines parsed services, CVE results, risk ratings, local impact explanations, and recommendations. Its analysis interface is designed so an Ollama provider can be added later.
+`ai/security_analyst.py` combines parser output, CVE data, and risk ratings. It currently uses local security explanations and is structured so an Ollama provider can be added later.
+
+When no CVE is found, the service is still stored as an informational `NO-CVE-MATCH` finding.
 
 ### SQLite
 
-`database/db.py` stores findings in `database/security.db`. Its uniqueness rules prevent repeated analysis from creating duplicate host, port, and CVE records.
+`database/db.py` stores findings in `database/security.db`.
+
+The uniqueness rule uses:
+
+```text
+ip_address + port + cve
+```
+
+This prevents duplicate rows when the same scan is analyzed multiple times.
 
 ### Dashboard
 
-`app.py` and `templates/index.html` provide the Flask and Bootstrap dashboard. The dashboard reads persisted findings from SQLite and displays summary metrics and risk-colored results.
+`templates/index.html` displays:
+
+- Upload form
+- Total hosts
+- Total findings
+- Critical findings
+- High findings
+- Risk-colored findings table
+
+The dashboard reads persisted data from SQLite.
 
 ### PDF Report
 
-`reports/pdf_generator.py` creates a local PDF assessment report containing an executive summary, findings, risk ratings, recommendations, and conclusion.
+`reports/pdf_generator.py` builds `reports/security_report.pdf` with:
 
-## Data Flow Summary
+- Executive Summary
+- Findings
+- Risk Ratings
+- Recommendations
+- Conclusion
 
-1. A user uploads an Nmap XML scan.
-2. The parser extracts discovered services.
-3. The CVE engine returns matching vulnerabilities or fallback results.
-4. The risk engine calculates risk ratings.
-5. The AI analysis module creates impact and remediation guidance.
-6. Findings are saved to SQLite.
-7. The dashboard displays persisted findings.
-8. The PDF generator creates a shareable assessment report.
+### Configuration
+
+`config.py` centralizes paths, upload limits, NVD settings, logging level, and Flask secret configuration.
+
+### Automated Quality Gates
+
+The test suite lives in `tests/` and covers:
+
+- XML parsing
+- CVE provider fallback
+- Risk rating boundaries
+- SQLite persistence
+- Flask dashboard and upload workflow
+- PDF generation
+
+GitHub Actions runs dependency validation, compile checks, tests, and Bandit security scanning.
