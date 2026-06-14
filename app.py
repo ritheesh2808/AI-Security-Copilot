@@ -129,6 +129,7 @@ def upload_scan():
             uploaded_filename=safe_name,
             source="upload",
         )
+        logger.info("Created scan record: scan_id=%d filename=%s", scan_id, safe_name)
         findings = build_security_findings(
             file_path,
             scan_id=scan_id,

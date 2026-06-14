@@ -91,6 +91,8 @@ def build_security_findings(
     """Analyze an Nmap scan, save its findings, and return the results."""
     findings: list[dict[str, str | float | int]] = []
     services = parse_nmap_scan(scan_path)
+    saved_host_ids: set[int] = set()
+    saved_service_count = 0
 
     if scan_id is None:
         scan_id = create_scan(
@@ -105,6 +107,7 @@ def build_security_findings(
             ip_address=str(service["ip_address"]),
             hostname=str(service.get("hostname", "")),
         )
+        saved_host_ids.add(host_id)
         service_id = create_service(
             host_id=host_id,
             port=int(service["port"]),
@@ -114,6 +117,7 @@ def build_security_findings(
             version=str(service["version"]),
             cpe=str(service.get("cpe", "")),
         )
+        saved_service_count += 1
         product = str(service["product"])
         version = str(service["version"])
         matching_cves = lookup_real_cves(product, version)
@@ -185,6 +189,9 @@ def build_security_findings(
                 provider_source="no_match",
             )
 
+    logger.info("Scan ID: %d", scan_id)
+    logger.info("Hosts saved count: %d", len(saved_host_ids))
+    logger.info("Services saved count: %d", saved_service_count)
     logger.info("Findings saved count: %d", len(findings))
     return findings
 

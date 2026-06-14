@@ -39,12 +39,19 @@ class FlaskAppTests(unittest.TestCase):
                         follow_redirects=True,
                     )
                     rows = db.get_all_findings()
+                    history = db.get_scan_history()
+                    latest_scan = history[0]
+                    findings = db.get_findings_for_scan(latest_scan["id"])
             finally:
                 app.config["UPLOAD_FOLDER"] = original_upload_folder
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Scan imported successfully", response.data)
         self.assertEqual(len(rows), 3)
+        self.assertEqual(latest_scan["uploaded_filename"], "sample.xml")
+        self.assertEqual(latest_scan["host_count"], 2)
+        self.assertEqual(latest_scan["finding_count"], 3)
+        self.assertEqual({row["provider_source"] for row in findings}, {"local_fallback"})
 
     def test_invalid_upload_extension_is_rejected(self) -> None:
         response = app.test_client().post(
